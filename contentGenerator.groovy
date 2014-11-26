@@ -4,35 +4,30 @@ import net.htmlparser.jericho.Source
 import org.jahia.api.Constants
 import org.jahia.registries.ServicesRegistry
 import org.jahia.services.SpringContextSingleton
-import org.jahia.services.content.JCRCallback
-import org.jahia.services.content.JCRNodeWrapper
-import org.jahia.services.content.JCRSessionFactory
-import org.jahia.services.content.JCRSessionWrapper
-import org.jahia.services.content.JCRTemplate
+import org.jahia.services.content.*
 import org.jahia.services.content.decorator.JCRGroupNode
+import org.jahia.services.content.decorator.JCRSiteNode
 import org.jahia.services.seo.VanityUrl
 import org.jahia.services.seo.jcr.VanityUrlManager
-import java.util.Properties
 
 import javax.jcr.RepositoryException
 
 def languagesList = ["sq", "ar", "be", "bg", "ca", "zh", "hr", "cs", "da", "nl", "et", "fi", "fr", "de", "el", "iw", "hu", "is", "in", "it", "ja"];
 
 
-def nb1stLevelPages = 10
-def nb2ndLevelPages = 5
-def nb3rdLevelPages = 5
+def nb1stLevelPages = 1
+def nb2ndLevelPages = 1
+def nb3rdLevelPages = 1
 def nbRowPerPages = 2
 def nbTextPerCols = 2
-def siteName = "mySite"
 def nbContents = 0
 
 def percentageExpiration = 20
 def percentagePerUser = 33
 
-def aclsOn1stpage = true;
-def aclsOn2ndpage = true;
-def aclsOn3rdpage = true;
+def aclsOn1stpage = false;
+def aclsOn2ndpage = false;
+def aclsOn3rdpage = false;
 def withExpiration = false;
 
 def nbOfGroupsPerLevel = 1
@@ -186,7 +181,7 @@ def updateContent = { JCRNodeWrapper page, int nbRow, int nbText, locale ->
 def VanityUrlManager vanityUrlManager = (VanityUrlManager) SpringContextSingleton.getBean("org.jahia.services.seo.jcr.VanityUrlManager")
 
 def generateContent = {
-    nbPagesFirstLevel, nbPagesSecondLevel, nbPagesThirdLevel, nbRowPerPage, nbTextPerPage, randomElements = false, publishFirstLevelOnEachIteration = false ->
+    siteName, nbPagesFirstLevel, nbPagesSecondLevel, nbPagesThirdLevel, nbRowPerPage, nbTextPerPage, randomElements = false, publishFirstLevelOnEachIteration = false ->
         JCRTemplate.getInstance().doExecuteWithSystemSession(null, Constants.EDIT_WORKSPACE, Locale.ENGLISH,
                 new JCRCallback<Object>() {
                     public Object doInJCR(JCRSessionWrapper session) throws RepositoryException {
@@ -256,7 +251,7 @@ def generateContent = {
 
 
 def updateContentForLanguages = {
-    nbPagesFirstLevel, nbPagesSecondLevel, nbPagesThirdLevel, nbRowPerPage, nbTextPerPage, languages = languagesList, publishFirstLevelOnEachIteration = false ->
+    siteName, nbPagesFirstLevel, nbPagesSecondLevel, nbPagesThirdLevel, nbRowPerPage, nbTextPerPage, languages = languagesList, publishFirstLevelOnEachIteration = false ->
         languages.each { language ->
             locale = new java.util.Locale(language);
             JCRTemplate.getInstance().doExecuteWithSystemSession(null, Constants.EDIT_WORKSPACE, locale,
@@ -304,21 +299,21 @@ def updateContentForLanguages = {
         }
 }
 
-def createGroups = { site = null ->
+def createGroups = { String site = null ->
     def randUsers = new Random()
     def service = ServicesRegistry.instance.jahiaGroupManagerService
     def userService = ServicesRegistry.instance.jahiaUserManagerService
-    if (service.lookupGroup(siteName, "group_0_0_0") == null) {
+    if (service.lookupGroup(site, "group_" + (site != null ? site + "_" : "") + "0_0_0") == null) {
         def session = JCRSessionFactory.instance.getCurrentSystemSession(Constants.EDIT_WORKSPACE, Locale.ENGLISH, Locale.ENGLISH)
         (0..nbOfGroupsPerLevel).each { first ->
             (0..nbOfGroupsPerLevel).each { second ->
                 (0..nbOfGroupsPerLevel).each {
                     def JCRGroupNode group = (JCRGroupNode) service.createGroup(site,
-                            "group_" + first + "_" + second + "_" + it, null,
-                            false,session)
-                    if(group!=null) {
+                            "group_" + (site != null ? site + "_" : "") + first + "_" + second + "_" + it, null,
+                            false, session)
+                    if (group != null) {
                         (0..nbUsersPerGroup).each {
-                            def user = userService.lookupUser("userGroovy_" + randUsers.nextInt(nbUsersToCreate))
+                            def user = userService.lookupUser("userGroovy_" + (site != null ? site + "_" : "") + randUsers.nextInt(nbUsersToCreate), site, session)
                             if (user != null) {
                                 group.addMember(user)
                             }
@@ -330,22 +325,22 @@ def createGroups = { site = null ->
         session.save()
         (0..nbOfGroupsPerLevel).each { first ->
             (0..nbOfGroupsPerLevel).each { second ->
-                def JCRGroupNode group = (JCRGroupNode) service.createGroup(site, "group_" + first + "_" + second, null,
-                        false,session)
+                def JCRGroupNode group = (JCRGroupNode) service.createGroup(site, "group_" + (site != null ? site + "_" : "") + first + "_" + second, null,
+                        false, session)
                 (0..3).each {
-                    if(group!=null) {
+                    if (group != null) {
                         group.addMember(service.lookupGroup(site,
-                                "group_" + first + "_" + second + "_" + randUsers.nextInt(nbOfGroupsPerLevel + 1)))
+                                "group_" + (site != null ? site + "_" : "") + first + "_" + second + "_" + randUsers.nextInt(nbOfGroupsPerLevel + 1)))
                     }
                 }
             }
         }
         session.save()
         (0..nbOfGroupsPerLevel).each { first ->
-            def JCRGroupNode group = (JCRGroupNode) service.createGroup(site, "group_" + first, null, false,session)
+            def JCRGroupNode group = (JCRGroupNode) service.createGroup(site, "group_" + (site != null ? site + "_" : "") + first, null, false, session)
             (0..3).each {
-                if(group!=null) {
-                    group.addMember(service.lookupGroup(site, "group_" + first + "_" + randUsers.nextInt(nbOfGroupsPerLevel + 1)))
+                if (group != null) {
+                    group.addMember(service.lookupGroup(site, "group_" + (site != null ? site + "_" : "") + first + "_" + randUsers.nextInt(nbOfGroupsPerLevel + 1)))
                 }
             }
         }
@@ -353,23 +348,54 @@ def createGroups = { site = null ->
     }
 }
 
-def createUsers = {
+def createUsers = { String site = null ->
     def userService = ServicesRegistry.instance.jahiaUserManagerService
-    if (userService.lookupUser("userGroovy_0") == null) {
+    if (userService.lookupUser("userGroovy_" + (site != null ? site + "_0" : "0")) == null) {
         def session = JCRSessionFactory.instance.getCurrentSystemSession(Constants.EDIT_WORKSPACE, Locale.ENGLISH, Locale.ENGLISH)
+        def properties = new java.util.Properties();
         (0..nbUsersToCreate).each { first ->
-            def properties = new java.util.Properties();
-            userService.createUser("userGroovy_" + first,"password", properties, session);
-            if(first % 100 ==0)
-            session.save()
+            if (site == null)
+                userService.createUser("userGroovy_" + first, "password", properties, session);
+            else
+                userService.createUser("userGroovy_" + site + "_" + first, site, "password", properties, session);
+            if (first % 100 == 0)
+                session.save()
         }
         session.save()
     }
 }
 
-createUsers()
-createGroups("mySite")
-//generateContent(nb1stLevelPages, nb2ndLevelPages, nb3rdLevelPages, nbRowPerPages, nbTextPerCols, true, true)
+
+def createSite = { siteKey ->
+    def sitesService = ServicesRegistry.instance.jahiaSitesService
+    if (sitesService.getSiteByKey(siteKey) == null) {
+        def session = JCRSessionFactory.instance.getCurrentSystemSession(Constants.EDIT_WORKSPACE, Locale.ENGLISH, Locale.ENGLISH)
+        def user = ServicesRegistry.instance.jahiaUserManagerService.lookupUser("root", session)
+        def site = sitesService.addSite(user.jahiaUser, siteKey, "dev." + siteKey + ".org", siteKey, siteKey, Locale.ENGLISH, "sample-bootstrap-templates", null, null, null, false, false, null)
+        def JCRSiteNode siteNode = session.getNode(site.getJCRLocalPath())
+        def page = siteNode.getHome().addNode("page", "jnt:page")
+        page.setProperty("j:templateName", "1col")
+        page.setProperty("jcr:title", "Default Empty Page")
+        def area = page.addNode("pagecontent", "jnt:contentList")
+        def row = area.addNode("bootstrap-row", "jnt:bootstrapRow")
+        row.setProperty("fluid", false)
+        def column = row.addNode("bootstrap-column", "jnt:bootstrapColumn")
+        column.setProperty("span", 8)
+        column.setProperty("offset", 0)
+        column = row.addNode("bootstrap-column-1", "jnt:bootstrapColumn")
+        column.setProperty("span", 4)
+        column.setProperty("offset", 0)
+        session.save()
+        ServicesRegistry.instance.JCRPublicationService.publishByMainId(site.identifier)
+    }
+}
+
+
+def siteKey = "groovysite2"
+createSite(siteKey)
+createUsers(siteKey)
+createGroups(siteKey)
+generateContent(siteKey, nb1stLevelPages, nb2ndLevelPages, nb3rdLevelPages, nbRowPerPages, nbTextPerCols, true, true)
 
 // Multilingual system
 
