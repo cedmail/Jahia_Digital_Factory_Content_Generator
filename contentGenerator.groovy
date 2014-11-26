@@ -371,7 +371,7 @@ def createSite = { siteKey ->
     if (sitesService.getSiteByKey(siteKey) == null) {
         def session = JCRSessionFactory.instance.getCurrentSystemSession(Constants.EDIT_WORKSPACE, Locale.ENGLISH, Locale.ENGLISH)
         def user = ServicesRegistry.instance.jahiaUserManagerService.lookupUser("root", session)
-        def site = sitesService.addSite(user.jahiaUser, siteKey, "dev." + siteKey + ".org", siteKey, siteKey, Locale.ENGLISH, "sample-bootstrap-templates", null, null, null, false, false, null)
+        def site = sitesService.addSite(user.jahiaUser, siteKey, "www." + siteKey + ".org.dev", siteKey, siteKey, Locale.ENGLISH, "sample-bootstrap-templates", null, null, null, false, false, null)
         def JCRSiteNode siteNode = session.getNode(site.getJCRLocalPath())
         def page = siteNode.getHome().addNode("page", "jnt:page")
         page.setProperty("j:templateName", "1col")
