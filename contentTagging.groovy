@@ -1,6 +1,7 @@
 import org.jahia.api.Constants
 import org.jahia.services.content.JCRSessionFactory
 import org.jahia.services.tags.TaggingService
+import org.jahia.services.tags.TagsSuggesterImpl
 import org.springframework.util.StopWatch
 
 import javax.jcr.query.Query
@@ -12,7 +13,7 @@ def rand = new Random()
 
 def tagService = TaggingService.instance
 
-def results = new File('/tmp/jahia_71_tags_perfs_'+(new Date().format("ddMMYYYYHHmm"))+'.csv')
+def results = new File('/tmp/jahia_71_tags_perfs_' + (new Date().format("ddMMYYYYHHmm")) + '.csv')
 results.createNewFile()
 results.append('totaltime,tags,min,max,avg\n')
 
@@ -41,13 +42,35 @@ def tagContent = { siteKey, tagsPerContent = 10, removeMixinTagFirst = false ->
     println 'avg = ' + avg + ' ms'
     println 'min = ' + min + ' ms'
     println 'max = ' + max + ' ms'
-    results.append(''+stopWatch.totalTimeMillis+','+stopWatch.taskCount+','+min+','+max+','+avg+'\n')
+    results.append('' + stopWatch.totalTimeMillis + ',' + stopWatch.taskCount + ',' + min + ',' + max + ',' + avg + '\n')
 }
 
+def tagSuggestions = { siteKey, howManySuggestions = 100 ->
+    def session = JCRSessionFactory.instance.getCurrentSystemSession(Constants.EDIT_WORKSPACE, Locale.ENGLISH, Locale.ENGLISH)
+    def TagsSuggesterImpl suggester = tagService.tagsSuggester
+    def StopWatch stopWatch = new StopWatch("Tags")
+    stopWatch.setKeepTaskList(true)
+    (1..howManySuggestions).each {
+        def tag = tags.get(rand.nextInt(tags.size()))
+        [true, false].each {
+            suggester.setFaceted(it)
+            def substring = tag.substring(0, 3)
+            stopWatch.start(it?"Faceted":"Non Faceted")
+            def suggest = suggester.suggest(substring, '/sites/' + siteKey, 1, 10, 0, true, session)
+            stopWatch.stop()
+            if (!suggest.isEmpty())
+                println "Suggestions by "+(it?"":"non")+" faceted engine for " + substring + " are " + suggest
+        }
+    }
+    println stopWatch.prettyPrint()
+}
+/*
 (0..10).each {
     println 'Add 50 tags per content after cleanup'
     tagContent("groovysite2", 50, true)
     println 'Add another 10 tags per content'
     tagContent("groovysite2", 10, false)
 }
+*/
+tagSuggestions("groovysite2")
 
