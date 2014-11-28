@@ -4,6 +4,7 @@ import org.jahia.services.tags.TaggingService
 import org.jahia.services.tags.TagsSuggesterImpl
 import org.springframework.util.StopWatch
 
+import javax.jcr.RepositoryException
 import javax.jcr.query.Query
 import java.text.DecimalFormat
 
@@ -22,17 +23,28 @@ def suggests = new File('/tmp/jahia_71_tags_suggester_perfs_' + (new Date().form
 suggests.createNewFile()
 suggests.append('faceted,totaltime,tags,min,max,avg,median,90%\n')
 
-def tagContent = { siteKey, tagsPerContent = 10, removeMixinTagFirst = false ->
+def renames = new File('/tmp/jahia_71_tags_renames_perfs_' + (new Date().format("ddMMYYYYHHmm")) + '.csv')
+renames.createNewFile()
+renames.append('totaltime,tags,min,max,avg,median,90%\n')
+
+def deletes = new File('/tmp/jahia_71_tags_deletes_perfs_' + (new Date().format("ddMMYYYYHHmm")) + '.csv')
+deletes.createNewFile()
+deletes.append('totaltime,tags,min,max,avg,median,90%\n')
+
+def tagContent = { siteKey, nbContentToTag = 100, tagsPerContent = 10, removeMixinTagFirst = false ->
     def session = JCRSessionFactory.instance.getCurrentSystemSession(Constants.EDIT_WORKSPACE, Locale.ENGLISH, Locale.ENGLISH)
     def query = session.getWorkspace().getQueryManager().createQuery("select [jcr:uuid] from [jnt:text] where isdescendantnode('/sites/" + siteKey + "')", Query.JCR_SQL2)
     def textNodeIds = query.execute().getRows().collectMany { row -> [row.getValue("jcr:uuid").string] }
     if (removeMixinTagFirst) {
-        textNodeIds.each { id -> session.getNodeByIdentifier(id).removeMixin("jmix:tagged"); }
-        session.save()
+        try {
+            textNodeIds.each { id -> session.getNodeByIdentifier(id).removeMixin("jmix:tagged"); }
+            session.save()
+        } catch (RepositoryException e) {
+        }
     }
     def StopWatch stopWatch = new StopWatch("Tags")
     stopWatch.setKeepTaskList(true)
-    def nbTags = textNodeIds.size() * tagsPerContent
+    def nbTags = nbContentToTag * tagsPerContent
     (1..nbTags).each {
         stopWatch.start("Tag content")
         def tag = tags.get(rand.nextInt(tags.size()))
@@ -44,7 +56,7 @@ def tagContent = { siteKey, tagsPerContent = 10, removeMixinTagFirst = false ->
     def min = stopWatch.getTaskInfo().iterator().min { task -> task.timeMillis }.timeMillis
     def max = stopWatch.getTaskInfo().iterator().max { task -> task.timeMillis }.timeMillis
     def median = decimalFormat.format(stopWatch.getTaskInfo().iterator().sort { task -> task.timeMillis }.getAt(stopWatch.taskInfo.length.intValue().intdiv(2).intValue()).timeMillis)
-    def ninetyPercent = decimalFormat.format(stopWatch.getTaskInfo().iterator().sort { task -> task.timeMillis }.getAt((stopWatch.taskInfo.length.intValue()*90).intdiv(100).intValue()).timeMillis)
+    def ninetyPercent = decimalFormat.format(stopWatch.getTaskInfo().iterator().sort { task -> task.timeMillis }.getAt((stopWatch.taskInfo.length.intValue() * 90).intdiv(100).intValue()).timeMillis)
     if (debug) {
         println 'It took ' + stopWatch.getTotalTimeMillis() + 'ms to set ' + stopWatch.getTaskCount() + ' tags on ' + textNodeIds.size() + " content"
         println 'avg = ' + avg + ' ms'
@@ -56,7 +68,7 @@ def tagContent = { siteKey, tagsPerContent = 10, removeMixinTagFirst = false ->
     results.append('' + stopWatch.totalTimeMillis + ',' + stopWatch.taskCount + ',' + min + ',' + max + ',' + avg + ',' + median + ',' + ninetyPercent + '\n')
 }
 
-def tagSuggestions = { siteKey, howManySuggestions = 10 ->
+def tagSuggestions = { siteKey, howManySuggestions = 1000 ->
     def session = JCRSessionFactory.instance.getCurrentSystemSession(Constants.EDIT_WORKSPACE, Locale.ENGLISH, Locale.ENGLISH)
     def TagsSuggesterImpl suggester = tagService.tagsSuggester
     def StopWatch stopWatch = new StopWatch("Tags")
@@ -94,12 +106,88 @@ def tagSuggestions = { siteKey, howManySuggestions = 10 ->
     }
 }
 
-(0..10).each {
-    println 'Add 50 tags per content after cleanup'
-    tagContent("groovysite2", 50, true)
-    println 'Add another 10 tags per content'
-    tagContent("groovysite2", 10, false)
+def tagRenaming = { siteKey, howManyRenaming = 1000 ->
+    def session = JCRSessionFactory.instance.getCurrentSystemSession(Constants.EDIT_WORKSPACE, Locale.ENGLISH, Locale.ENGLISH)
+    def TagsSuggesterImpl suggester = tagService.tagsSuggester
+    suggester.setFaceted(false)
+    def StopWatch stopWatch = new StopWatch("Tags")
+    stopWatch.setKeepTaskList(true)
+    (1..howManyRenaming).each {
+        def tag = tags.get(rand.nextInt(tags.size()))
+        def substring = tag.substring(0, 3)
+        def suggest = suggester.suggest(substring, '/sites/' + siteKey, 1, 10, 0, true, session)
+        if (!suggest.isEmpty()) {
+            def toBerenamed = suggest.keySet().getAt(0)
+            stopWatch.start("Renaming " + toBerenamed)
+            tagService.updateOrDeleteTagOnSite("/sites/" + siteKey, toBerenamed, toBerenamed + "_renamed")
+            stopWatch.stop()
+        }
+    }
+    def value = stopWatch.getTaskInfo()
+    def size = value.size()
+    def totalTime = value.iterator().sum { it.timeMillis }
+    def avg = decimalFormat.format(totalTime / size)
+    def min = value.iterator().min { task -> task.timeMillis }.timeMillis
+    def max = value.iterator().max { task -> task.timeMillis }.timeMillis
+    def median = decimalFormat.format(value.iterator().sort { task -> task.timeMillis }.getAt(size.intdiv(2).intValue()).timeMillis)
+    def ninetyPercent = decimalFormat.format(value.iterator().sort { task -> task.timeMillis }.getAt((size.intValue() * 90).intdiv(100).intValue()).timeMillis)
+    if (debug) {
+        println "It took " + totalTime + "ms to rename " + size + " tags"
+        println 'avg = ' + avg + ' ms'
+        println 'min = ' + min + ' ms'
+        println 'max = ' + max + ' ms'
+        println 'median = ' + median + ' ms' + size.intdiv(2)
+        println '90% < ' + ninetyPercent + ' ms' + (size.intValue() * 90).intdiv(100).intValue()
+    }
+    renames.append('' + totalTime + ',' + size + ',' + min + ',' + max + ',' + avg + ',' + median + ',' + ninetyPercent + '\n')
 }
 
-tagSuggestions("groovysite2", 5000)
+def tagDeletion = { siteKey, howManyRenaming = 1000 ->
+    def session = JCRSessionFactory.instance.getCurrentSystemSession(Constants.EDIT_WORKSPACE, Locale.ENGLISH, Locale.ENGLISH)
+    def TagsSuggesterImpl suggester = tagService.tagsSuggester
+    suggester.setFaceted(false)
+    def StopWatch stopWatch = new StopWatch("Tags")
+    stopWatch.setKeepTaskList(true)
+    (1..howManyRenaming).each {
+        def tag = tags.get(rand.nextInt(tags.size()))
+        def substring = tag.substring(0, 3)
+        def suggest = suggester.suggest(substring, '/sites/' + siteKey, 1, 10, 0, true, session)
+        if (!suggest.isEmpty()) {
+            def toBeDeleted = suggest.keySet().getAt(0)
+            stopWatch.start("Deleting " + toBeDeleted)
+            tagService.updateOrDeleteTagOnSite("/sites/" + siteKey, toBeDeleted, null)
+            stopWatch.stop()
+        }
+    }
+    def value = stopWatch.getTaskInfo()
+    def size = value.size()
+    def totalTime = value.iterator().sum { it.timeMillis }
+    def avg = decimalFormat.format(totalTime / size)
+    def min = value.iterator().min { task -> task.timeMillis }.timeMillis
+    def max = value.iterator().max { task -> task.timeMillis }.timeMillis
+    def median = decimalFormat.format(value.iterator().sort { task -> task.timeMillis }.getAt(size.intdiv(2).intValue()).timeMillis)
+    def ninetyPercent = decimalFormat.format(value.iterator().sort { task -> task.timeMillis }.getAt((size.intValue() * 90).intdiv(100).intValue()).timeMillis)
+    if (debug) {
+        println "It took " + totalTime + "ms to delete " + size + " tags"
+        println 'avg = ' + avg + ' ms'
+        println 'min = ' + min + ' ms'
+        println 'max = ' + max + ' ms'
+        println 'median = ' + median + ' ms' + size.intdiv(2)
+        println '90% < ' + ninetyPercent + ' ms' + (size.intValue() * 90).intdiv(100).intValue()
+    }
+    deletes.append('' + totalTime + ',' + size + ',' + min + ',' + max + ',' + avg + ',' + median + ',' + ninetyPercent + '\n')
+}
+
+def siteKey = "groovysite"
+
+(0..10).each {
+    tagContent(siteKey,50, 5, it==0)
+
+    tagSuggestions(siteKey)
+
+    tagRenaming(siteKey)
+
+    tagDeletion(siteKey)
+}
+
 

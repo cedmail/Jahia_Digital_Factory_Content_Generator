@@ -14,12 +14,6 @@ import javax.jcr.RepositoryException
 
 def languagesList = ["sq", "ar", "be", "bg", "ca", "zh", "hr", "cs", "da", "nl", "et", "fi", "fr", "de", "el", "iw", "hu", "is", "in", "it", "ja"];
 
-
-def nb1stLevelPages = 1
-def nb2ndLevelPages = 1
-def nb3rdLevelPages = 1
-def nbRowPerPages = 2
-def nbTextPerCols = 2
 def nbContents = 0
 
 def percentageExpiration = 20
@@ -33,7 +27,6 @@ def withExpiration = false;
 def nbOfGroupsPerLevel = 1
 def randomgroupName = new Random()
 def nbUsersPerGroup = 10
-def nbUsersOnPlatform = 199
 
 def nbUsersToCreate = 100
 
@@ -365,13 +358,14 @@ def createUsers = { String site = null ->
     }
 }
 
+def modules = ["tags"]
 
 def createSite = { siteKey ->
     def sitesService = ServicesRegistry.instance.jahiaSitesService
     if (sitesService.getSiteByKey(siteKey) == null) {
         def session = JCRSessionFactory.instance.getCurrentSystemSession(Constants.EDIT_WORKSPACE, Locale.ENGLISH, Locale.ENGLISH)
         def user = ServicesRegistry.instance.jahiaUserManagerService.lookupUser("root", session)
-        def site = sitesService.addSite(user.jahiaUser, siteKey, "www." + siteKey + ".org.dev", siteKey, siteKey, Locale.ENGLISH, "sample-bootstrap-templates", null, null, null, false, false, null)
+        def site = sitesService.addSite(user.jahiaUser, siteKey, "www." + siteKey + ".org.dev", siteKey, siteKey, Locale.ENGLISH, "sample-bootstrap-templates", modules.toArray(new String[modules.size()]), null, null, null, false, false, null)
         def JCRSiteNode siteNode = session.getNode(site.getJCRLocalPath())
         def page = siteNode.getHome().addNode("page", "jnt:page")
         page.setProperty("j:templateName", "1col")
@@ -391,11 +385,11 @@ def createSite = { siteKey ->
 }
 
 
-def siteKey = "groovysite2"
+def siteKey = "groovysite"
 createSite(siteKey)
 createUsers(siteKey)
 createGroups(siteKey)
-generateContent(siteKey, nb1stLevelPages, nb2ndLevelPages, nb3rdLevelPages, nbRowPerPages, nbTextPerCols, true, true)
+generateContent(siteKey, 50, 2, 1, 3, 3, true, true)
 
 // Multilingual system
 
