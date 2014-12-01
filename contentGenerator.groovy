@@ -389,7 +389,7 @@ def siteKey = "groovysite"
 createSite(siteKey)
 createUsers(siteKey)
 createGroups(siteKey)
-generateContent(siteKey, 50, 2, 1, 3, 3, true, true)
+generateContent(siteKey, 50, 2, 1, 3, 3, false, true)
 
 // Multilingual system
 
